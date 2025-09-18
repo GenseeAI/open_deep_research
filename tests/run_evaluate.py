@@ -13,7 +13,7 @@ import uuid
 client = Client()
 
 # NOTE: Configure the right dataset and evaluators
-dataset_name = "Deep Research Bench En Harder"
+dataset_name = "Deep Research Bench"
 exp_name = f"ODR GPT-5, Gensee Search"
 
 # evaluators = [eval_overall_quality, eval_relevance, eval_structure, eval_correctness, eval_groundedness, eval_completeness]
