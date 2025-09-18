@@ -34,6 +34,126 @@ from open_deep_research.prompts import summarize_webpage_prompt
 from open_deep_research.state import ResearchComplete, Summary
 
 ##########################
+# Gensee Search Tool Utils
+##########################
+GENSEE_SEARCH_DESCRIPTION = (
+    "A search engine optimized for comprehensive, accurate, and trusted results. "
+    "Useful for when you need to answer questions about current events."
+)
+
+async def call_gensee_search(query: str, max_results: int, config: RunnableConfig = None) -> Dict[str, Any]:
+    """Call the serve_gensee_search endpoint asynchronously"""
+    
+    url = "https://platform.gensee.ai/tool/search"
+    
+    payload = {
+        "query": query,
+        "max_results": max_results,
+        "mode": "evidence"
+    }
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {get_gensee_api_key(config)}'
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload, headers=headers) as response:
+                response.raise_for_status()
+                response_json = await response.json()
+                response_json["query"] = query
+                return response_json
+    except aiohttp.ClientError as e:
+        print(f"Error calling endpoint: {e}")
+        return None
+
+@tool(description=GENSEE_SEARCH_DESCRIPTION)
+async def gensee_search(
+    queries: List[str],
+    max_results: Annotated[int, InjectedToolArg] = 5,
+    config: RunnableConfig = None,
+) -> str:
+    """Fetch and summarize search results from Gensee search API.
+
+    Args:
+        queries: List of search queries to execute
+        max_results: Maximum number of results to return per query
+
+    Returns:
+        Formatted string containing summarized search results
+    """
+    search_results = await asyncio.gather(*[call_gensee_search(query, max_results, config) for query in queries])
+    
+    # Step 2: Deduplicate results by URL to avoid processing the same content multiple times
+    unique_results = {}
+    for response in search_results:
+        for result in response['entries']:
+            url = result['url']
+            if url not in unique_results:
+                unique_results[url] = {**result, "query": response['query']}
+    
+    # Step 3: Set up the summarization model with configuration
+    configurable = Configuration.from_runnable_config(config)
+    
+    # Character limit to stay within model token limits (configurable)
+    max_char_to_include = configurable.max_content_length
+    
+    # Initialize summarization model with retry logic
+    model_api_key = get_api_key_for_model(configurable.summarization_model, config)
+    summarization_model = init_chat_model(
+        model=configurable.summarization_model,
+        max_tokens=configurable.summarization_model_max_tokens,
+        api_key=model_api_key,
+        tags=["langsmith:nostream"]
+    ).with_structured_output(Summary).with_retry(
+        stop_after_attempt=configurable.max_structured_output_retries
+    )
+    
+    # Step 4: Create summarization tasks (skip empty content)
+    async def noop():
+        """No-op function for results without raw content."""
+        return None
+    
+    summarization_tasks = [
+        noop() if not result.get("content") 
+        else summarize_webpage(
+            summarization_model, 
+            result['content'][:max_char_to_include]
+        )
+        for result in unique_results.values()
+    ]
+    
+    # Step 5: Execute all summarization tasks in parallel
+    summaries = await asyncio.gather(*summarization_tasks)
+    
+    # Step 6: Combine results with their summaries
+    summarized_results = {
+        url: {
+            'title': result['title'], 
+            'content': result['content'] if summary is None else summary
+        }
+        for url, result, summary in zip(
+            unique_results.keys(), 
+            unique_results.values(), 
+            summaries
+        )
+    }
+    
+    # Step 7: Format the final output
+    if not summarized_results:
+        return "No valid search results found. Please try different search queries or use a different search API."
+    
+    formatted_output = "Search results: \n\n"
+    for i, (url, result) in enumerate(summarized_results.items()):
+        formatted_output += f"\n\n--- SOURCE {i+1}: {result['title']} ---\n"
+        formatted_output += f"URL: {url}\n\n"
+        formatted_output += f"SUMMARY:\n{result['content']}\n\n"
+        formatted_output += "\n\n" + "-" * 80 + "\n"
+    
+    return formatted_output
+    
+
+##########################
 # Tavily Search Tool Utils
 ##########################
 TAVILY_SEARCH_DESCRIPTION = (
@@ -192,7 +312,7 @@ async def summarize_webpage(model: BaseChatModel, webpage_content: str) -> str:
         # Execute summarization with timeout to prevent hanging
         summary = await asyncio.wait_for(
             model.ainvoke([HumanMessage(content=prompt_content)]),
-            timeout=60.0  # 60 second timeout for summarization
+            timeout=120.0  # 120 second timeout for summarization
         )
         
         # Format the summary with structured sections
@@ -551,7 +671,16 @@ async def get_search_tool(search_api: SearchAPI):
         
     elif search_api == SearchAPI.TAVILY:
         # Configure Tavily search tool with metadata
-        search_tool = tavily_search
+        search_tool = tavily_search 
+        search_tool.metadata = {
+            **(search_tool.metadata or {}), 
+            "type": "search", 
+            "name": "web_search"
+        }
+        return [search_tool]
+    elif search_api == SearchAPI.GENSEE:
+        # Configure Tavily search tool with metadata
+        search_tool = gensee_search 
         search_tool.metadata = {
             **(search_tool.metadata or {}), 
             "type": "search", 
@@ -923,3 +1052,15 @@ def get_tavily_api_key(config: RunnableConfig):
         return api_keys.get("TAVILY_API_KEY")
     else:
         return os.getenv("TAVILY_API_KEY")
+
+
+def get_gensee_api_key(config: RunnableConfig):
+    """Get Gensee API key from environment or config."""
+    should_get_from_config = os.getenv("GET_API_KEYS_FROM_CONFIG", "false")
+    if should_get_from_config.lower() == "true":
+        api_keys = config.get("configurable", {}).get("apiKeys", {})
+        if not api_keys:
+            return None
+        return api_keys.get("GENSEE_API_KEY")
+    else:
+        return os.getenv("GENSEE_API_KEY")

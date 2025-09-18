@@ -67,3 +67,6 @@ tmp/
 temp/
 
 .langgraph_api
+check_run.py
+data_transform.py
+query.jsonl

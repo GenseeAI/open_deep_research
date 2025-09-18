@@ -14,6 +14,7 @@ class SearchAPI(Enum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     TAVILY = "tavily"
+    GENSEE = "gensee"
     NONE = "none"
 
 class MCPConfig(BaseModel):
