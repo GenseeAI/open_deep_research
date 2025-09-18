@@ -59,7 +59,7 @@ Ask a question in the `messages` input field and click `Submit`. Select differen
 
 ### ⚙️ Configurations
 
-See the fields in the [run_evaluate.py](https://github.com/GenseeAI/open_deep_research.git/tests/run_evaluate.py) to config the model usage and other agent behaviors.
+See the fields in the [run_evaluate.py](https://github.com/GenseeAI/open_deep_research/blob/main/tests/run_evaluate.py) to config the model usage and other agent behaviors.
 
 ### 📊 Evaluation
 
