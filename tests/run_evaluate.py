@@ -71,7 +71,7 @@ async def main():
         data=dataset_name,
         evaluators=evaluators,
         experiment_prefix=exp_name,
-        max_concurrency=10,
+        max_concurrency=3,
         metadata={
             "max_structured_output_retries": max_structured_output_retries,
             "allow_clarification": allow_clarification,
