@@ -87,7 +87,7 @@ async def gensee_search(
     # Step 2: Deduplicate results by URL to avoid processing the same content multiple times
     unique_results = {}
     for response in search_results:
-        for result in response['entries']:
+        for result in response['search_response']:
             url = result['url']
             if url not in unique_results:
                 unique_results[url] = {**result, "query": response['query']}
