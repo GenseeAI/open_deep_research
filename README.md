@@ -18,7 +18,7 @@
 ```bash
 git clone https://github.com/GenseeAI/open_deep_research.git
 cd open_deep_research
-uv venv
+uv venv --python=3.12
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
