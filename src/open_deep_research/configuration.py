@@ -2,7 +2,7 @@
 
 import os
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Literal
 
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
@@ -72,6 +72,34 @@ class Configuration(BaseModel):
                 "max": 20,
                 "step": 1,
                 "description": "Maximum number of research units to run concurrently. This will allow the researcher to use multiple sub-agents to conduct research. Note: with more concurrency, you may run into rate limits."
+            }
+        }
+    )
+    # Parallel Supervisors Configuration
+    max_concurrent_supervisors: int = Field(
+        default=3,
+        metadata={
+            "x_oap_ui_config": {
+                "type": "slider",
+                "default": 3,
+                "min": 1,
+                "max": 10,
+                "step": 1,
+                "description": "Maximum number of supervisor subgraphs to run in parallel after the research brief."
+            }
+        }
+    )
+    parallel_supervisor_strategy: Literal["early_stop", "aggregate"] = Field(
+        default="early_stop",
+        metadata={
+            "x_oap_ui_config": {
+                "type": "select",
+                "default": "early_stop",
+                "description": "Whether parallel supervisors receive the identical brief or variants of it.",
+                "options": [
+                    {"label": "Early Stop", "value": "early_stop"},
+                    {"label": "Aggregate", "value": "aggregate"}
+                ]
             }
         }
     )
